@@ -240,33 +240,78 @@ const IDEPanel = ({ generatedCode, toonOutput, aiFeedback }) => {
 
                 {activeTab === "feedback" && (
                     <div className="h-full p-4 overflow-auto space-y-3">
+                        <div className="mb-4">
+                            <button
+                                onClick={async () => {
+                                    setIsAiProcessing(true);
+                                    try {
+                                        // Get current TOON data from parent or context if available, 
+                                        // but here we might need to pass it down or trigger an event.
+                                        // For now, we'll dispatch an event to request analysis
+                                        window.dispatchEvent(new CustomEvent('requestCircuitAnalysis'));
+                                    } catch (error) {
+                                        console.error(error);
+                                    } finally {
+                                        setIsAiProcessing(false);
+                                    }
+                                }}
+                                disabled={isAiProcessing}
+                                className="w-full py-2 px-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg font-medium shadow-md flex items-center justify-center gap-2 transition-all"
+                            >
+                                {isAiProcessing ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        Analyzing Circuit...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Advanced AI Analysis
+                                    </>
+                                )}
+                            </button>
+                        </div>
+
                         {aiFeedback && aiFeedback.length > 0 ? (
                             aiFeedback.map((item, index) => (
                                 <div
                                     key={index}
-                                    className={`p-3 rounded-lg border-l-4 ${item.type === "error"
+                                    className={`p-3 rounded-lg border-l-4 ${item.type === "error" || item.severity === "critical"
                                         ? "border-red-500 bg-red-50 dark:bg-red-900/20"
-                                        : "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20"
+                                        : item.type === "warning" || item.severity === "warning"
+                                            ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20"
+                                            : "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
                                         }`}
                                 >
                                     <div className="flex items-start gap-2">
                                         <span
-                                            className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${item.type === "error"
+                                            className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${item.type === "error" || item.severity === "critical"
                                                 ? "bg-red-500 text-white"
-                                                : "bg-yellow-500 text-white"
+                                                : item.type === "warning" || item.severity === "warning"
+                                                    ? "bg-yellow-500 text-white"
+                                                    : "bg-blue-500 text-white"
                                                 }`}
                                         >
-                                            {item.type === "error" ? "!" : "⚠"}
+                                            {item.type === "error" || item.severity === "critical" ? "!" : item.type === "warning" || item.severity === "warning" ? "⚠" : "i"}
                                         </span>
                                         <div className="flex-1">
                                             <p
-                                                className={`text-sm font-medium ${item.type === "error"
+                                                className={`text-sm font-medium ${item.type === "error" || item.severity === "critical"
                                                     ? "text-red-800 dark:text-red-200"
-                                                    : "text-yellow-800 dark:text-yellow-200"
+                                                    : item.type === "warning" || item.severity === "warning"
+                                                        ? "text-yellow-800 dark:text-yellow-200"
+                                                        : "text-blue-800 dark:text-blue-200"
                                                     }`}
                                             >
                                                 {item.message}
                                             </p>
+                                            {item.recommendation && (
+                                                <p className="text-xs mt-1 text-gray-600 dark:text-gray-400">
+                                                    💡 {item.recommendation}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -287,7 +332,7 @@ const IDEPanel = ({ generatedCode, toonOutput, aiFeedback }) => {
                                     />
                                 </svg>
                                 <p className="font-medium">No issues detected</p>
-                                <p className="text-sm mt-1">Your circuit looks good!</p>
+                                <p className="text-sm mt-1">Run Advanced Analysis for deep check</p>
                             </div>
                         )}
                     </div>

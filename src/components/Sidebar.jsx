@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tooltip } from "@heroui/react";
 import ComponentManager from './ComponentManager';
+import { getIcon } from '../constants/icons.jsx';
 
 const SidebarItem = ({ type, label, color, onDragStart, customData, onViewDetails, isDefault }) => (
     <div className="relative group">
@@ -10,8 +11,12 @@ const SidebarItem = ({ type, label, color, onDragStart, customData, onViewDetail
                 onDragStart={(event) => onDragStart(event, type, customData)}
                 draggable
             >
-                <div className={`w-6 h-6 rounded-md ${color} flex items-center justify-center text-[8px] text-white font-bold`}>
-                    {label.substring(0, 2).toUpperCase()}
+                <div className={`w-6 h-6 rounded-md ${color} flex items-center justify-center text-white p-1`} style={customData ? { backgroundColor: customData.color } : {}}>
+                    {customData && customData.icon ? (
+                        getIcon(customData.icon)
+                    ) : (
+                        <span className="text-[8px] font-bold">{label.substring(0, 2).toUpperCase()}</span>
+                    )}
                 </div>
             </div>
         </Tooltip>
@@ -32,18 +37,22 @@ const SidebarItem = ({ type, label, color, onDragStart, customData, onViewDetail
 const Sidebar = () => {
     const [customComponents, setCustomComponents] = useState([]);
     const [hiddenDefaults, setHiddenDefaults] = useState([]);
+    const [defaultOverrides, setDefaultOverrides] = useState({});
     const [isManagerOpen, setIsManagerOpen] = useState(false);
 
     const defaultComponents = [
         { type: 'arduinoNano', label: 'Arduino Nano', color: 'bg-blue-500' },
         { type: 'esp32', label: 'ESP32', color: 'bg-gray-900' },
+        { type: 'raspberryPi', label: 'Raspberry Pi', color: 'bg-green-600' },
         { type: 'servoMotor', label: 'Servo Motor', color: 'bg-gray-700' },
         { type: 'stepperMotor', label: 'Stepper Motor', color: 'bg-gray-500' },
     ];
 
     useEffect(() => {
         loadCustomComponents();
+        loadCustomComponents();
         loadHiddenDefaults();
+        loadDefaultOverrides();
     }, []);
 
     const loadCustomComponents = () => {
@@ -58,6 +67,19 @@ const Sidebar = () => {
         if (stored) {
             setHiddenDefaults(JSON.parse(stored));
         }
+    };
+
+    const loadDefaultOverrides = () => {
+        const stored = localStorage.getItem('defaultComponentOverrides');
+        if (stored) {
+            setDefaultOverrides(JSON.parse(stored));
+        }
+    };
+
+    const handleOverrideDefault = (type, newProps) => {
+        const updated = { ...defaultOverrides, [type]: { ...defaultOverrides[type], ...newProps } };
+        localStorage.setItem('defaultComponentOverrides', JSON.stringify(updated));
+        setDefaultOverrides(updated);
     };
 
     const hideDefaultComponent = (type) => {
@@ -129,25 +151,33 @@ const Sidebar = () => {
         <>
             <div className="w-16 flex flex-col items-center py-6 gap-4 bg-background border-r border-divider h-full z-10 shadow-sm">
                 {/* Built-in Components */}
-                {visibleDefaults.map((comp) => (
-                    <SidebarItem
-                        key={comp.type}
-                        type={comp.type}
-                        label={comp.label}
-                        color={comp.color}
-                        onDragStart={onDragStart}
-                        onViewDetails={() => {
-                            setIsManagerOpen(true);
-                            // Pass component info to manager to show details
-                            setTimeout(() => {
-                                window.dispatchEvent(new CustomEvent('viewComponentDetails', {
-                                    detail: { ...comp, pins: getDefaultComponentPins(comp.type) }
-                                }));
-                            }, 100);
-                        }}
-                        isDefault={true}
-                    />
-                ))}
+                {visibleDefaults.map((comp) => {
+                    const override = defaultOverrides[comp.type] || {};
+                    const displayLabel = override.label || comp.label;
+                    const displayColor = override.color || comp.color;
+                    const displayIcon = override.icon; // Could be undefined
+
+                    return (
+                        <SidebarItem
+                            key={comp.type}
+                            type={comp.type}
+                            label={displayLabel}
+                            color={displayColor}
+                            onDragStart={onDragStart}
+                            customData={{ ...comp, ...override }} // Pass merged data
+                            onViewDetails={() => {
+                                setIsManagerOpen(true);
+                                // Pass component info to manager to show details
+                                setTimeout(() => {
+                                    window.dispatchEvent(new CustomEvent('viewComponentDetails', {
+                                        detail: { ...comp, ...override, pins: getDefaultComponentPins(comp.type) }
+                                    }));
+                                }, 100);
+                            }}
+                            isDefault={true}
+                        />
+                    );
+                })}
 
                 {/* Divider */}
                 {customComponents.length > 0 && (
@@ -180,7 +210,10 @@ const Sidebar = () => {
                 {/* Manage Components Button */}
                 <Tooltip content="Manage Components" placement="right">
                     <button
-                        onClick={() => setIsManagerOpen(true)}
+                        onClick={() => {
+                            setStartInSettings(false);
+                            setIsManagerOpen(true);
+                        }}
                         className="w-10 h-10 rounded-lg flex items-center justify-center shadow-sm hover:shadow-md transition-all hover:scale-105 border border-divider bg-content1 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                     >
                         <svg className="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -199,6 +232,9 @@ const Sidebar = () => {
                 onComponentsChange={(comps) => setCustomComponents(comps)}
                 hiddenDefaults={hiddenDefaults}
                 onRestoreDefault={restoreDefaultComponent}
+                onHideDefault={hideDefaultComponent}
+                defaultOverrides={defaultOverrides}
+                onOverrideDefault={handleOverrideDefault}
                 defaultComponents={defaultComponents}
                 startInSettings={startInSettings}
             />

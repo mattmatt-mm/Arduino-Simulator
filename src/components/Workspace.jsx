@@ -9,6 +9,7 @@ import ReactFlow, {
     ReactFlowProvider,
     useReactFlow,
     applyEdgeChanges,
+    ConnectionMode,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -18,6 +19,7 @@ import ESP32Node from './nodes/ESP32Node';
 import ServoMotorNode from './nodes/ServoMotorNode';
 import StepperMotorNode from './nodes/StepperMotorNode';
 import CustomComponentNode from './nodes/CustomComponentNode';
+import RaspberryPiNode from './nodes/RaspberryPiNode';
 import WireToolbar from './WireToolbar';
 
 import { generateTOON } from '../utils/toonGenerator';
@@ -31,6 +33,7 @@ const nodeTypes = {
     servoMotor: ServoMotorNode,
     stepperMotor: StepperMotorNode,
     customComponent: CustomComponentNode,
+    raspberryPi: RaspberryPiNode,
 };
 
 const initialNodes = [];
@@ -193,6 +196,7 @@ const WorkspaceContent = ({ onCodeChange, onTOONChange, onFeedbackChange }) => {
                 onEdgeClick={onEdgeClick}
                 onPaneClick={onPaneClick}
                 onNodeContextMenu={onNodeContextMenu}
+                connectionMode={ConnectionMode.Loose}
                 fitView
             >
                 <Controls />

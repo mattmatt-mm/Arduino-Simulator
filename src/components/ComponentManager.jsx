@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { geminiService } from '../services/geminiService';
+import { COMPONENT_ICONS, getIcon } from '../constants/icons.jsx';
 
-const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults = [], onRestoreDefault, defaultComponents = [], startInSettings }) => {
+const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults = [], onRestoreDefault, onHideDefault, defaultOverrides = {}, onOverrideDefault, defaultComponents = [], startInSettings }) => {
     const [components, setComponents] = useState([]);
     const [isAdding, setIsAdding] = useState(false);
     const [viewingComponent, setViewingComponent] = useState(null);
@@ -12,12 +13,20 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
     const [saveStatus, setSaveStatus] = useState('idle'); // 'idle', 'validating', 'saved', 'error'
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [componentToDelete, setComponentToDelete] = useState(null);
+    const [isEditingIcon, setIsEditingIcon] = useState(false);
+    const [editingIconData, setEditingIconData] = useState({ color: '', icon: '', label: '' });
 
     useEffect(() => {
-        if (startInSettings) {
-            setShowSettings(true);
+        if (isOpen) {
+            setShowSettings(!!startInSettings);
+            // Reset to main list view when opening in standard mode
+            // The 'viewComponentDetails' event will override this if triggered
+            if (!startInSettings) {
+                setViewingComponent(null);
+                setIsAdding(false);
+            }
         }
-    }, [startInSettings]);
+    }, [isOpen, startInSettings]);
     const [newComponent, setNewComponent] = useState({
         name: '',
         type: 'custom',
@@ -31,8 +40,16 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
         loadApiKey();
 
         // Listen for component detail view requests from sidebar
+        // Listen for component detail view requests from sidebar
         const handleViewDetails = (event) => {
-            setViewingComponent(event.detail);
+            const comp = event.detail;
+            // If it's a built-in component, merge with overrides
+            if (comp.type && defaultComponents.find(c => c.type === comp.type)) {
+                const override = defaultOverrides[comp.type] || {};
+                setViewingComponent({ ...comp, ...override });
+            } else {
+                setViewingComponent(comp);
+            }
         };
 
         window.addEventListener('viewComponentDetails', handleViewDetails);
@@ -262,14 +279,31 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
     };
 
     const handleSaveComponent = () => {
-        if (!newComponent.name || newComponent.pins.length === 0) {
-            alert('Please provide a name and at least one pin');
+        if (!newComponent.name) {
+            alert('Please enter a component name');
             return;
         }
-        const updated = [...components, { ...newComponent, id: Date.now().toString() }];
-        saveComponents(updated);
+
+        // Check for duplicates
+        const isDuplicate = components.some(c => c.name.toLowerCase() === newComponent.name.toLowerCase() && c.id !== newComponent.id);
+        if (isDuplicate) {
+            alert('A component with this name already exists. Please choose a different name.');
+            return;
+        }
+
+        const componentToSave = {
+            ...newComponent,
+            id: newComponent.id || `custom_${Date.now()}`,
+            icon: newComponent.icon || 'chip'
+        };
+
+        const updatedComponents = newComponent.id
+            ? components.map(c => c.id === newComponent.id ? componentToSave : c)
+            : [...components, componentToSave];
+
+        saveComponents(updatedComponents);
         setIsAdding(false);
-        setNewComponent({ name: '', type: 'custom', pins: [], color: '#4B5563' });
+        setNewComponent({ name: '', type: 'custom', pins: [], color: '#4B5563', icon: 'chip' });
     };
 
     const handleDeleteComponent = (id) => {
@@ -383,6 +417,29 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
         return pinData[type] || [];
     };
 
+    const handleSaveIconEdit = () => {
+        if (!viewingComponent) return;
+
+        const updates = {
+            color: editingIconData.color,
+            icon: editingIconData.icon,
+            // Only update label/name if it's not empty
+            ...(editingIconData.label ? { [viewingComponent.type === 'custom' ? 'name' : 'label']: editingIconData.label } : {})
+        };
+
+        if (viewingComponent.type === 'custom') {
+            // Update custom component
+            const updated = components.map(c => c.id === viewingComponent.id ? { ...c, ...updates } : c);
+            saveComponents(updated);
+            setViewingComponent({ ...viewingComponent, ...updates });
+        } else {
+            // Update built-in component override
+            onOverrideDefault && onOverrideDefault(viewingComponent.type, updates);
+            setViewingComponent({ ...viewingComponent, ...updates });
+        }
+        setIsEditingIcon(false);
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -443,10 +500,10 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
                                         onClick={() => saveApiKey()}
                                         disabled={saveStatus === 'validating' || saveStatus === 'saved'}
                                         className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 ${saveStatus === 'saved'
-                                                ? 'bg-green-600 hover:bg-green-700 text-white'
-                                                : saveStatus === 'error'
-                                                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                                                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                                            : saveStatus === 'error'
+                                                ? 'bg-red-600 hover:bg-red-700 text-white'
+                                                : 'bg-blue-600 hover:bg-blue-700 text-white'
                                             }`}
                                     >
                                         {saveStatus === 'validating' ? (
@@ -479,14 +536,112 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
                         /* Component Detail View */
                         <div className="space-y-4">
                             {/* Component Info */}
-                            <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                                <div className="w-16 h-16 rounded-lg" style={{ backgroundColor: viewingComponent.color || (viewingComponent.type && defaultComponents.find(c => c.type === viewingComponent.type)?.color) }}></div>
+                            <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg relative">
+                                <div
+                                    className={`w-16 h-16 rounded-lg flex items-center justify-center text-white p-3 cursor-pointer hover:opacity-80 transition-opacity relative group ${viewingComponent.color?.startsWith('#') ? '' : (viewingComponent.color || (viewingComponent.type && defaultComponents.find(c => c.type === viewingComponent.type)?.color) || 'bg-gray-600')}`}
+                                    style={viewingComponent.color?.startsWith('#') ? { backgroundColor: viewingComponent.color } : {}}
+                                    onClick={() => {
+                                        setEditingIconData({
+                                            color: viewingComponent.color || '#4B5563',
+                                            icon: viewingComponent.icon || 'chip',
+                                            label: viewingComponent.label || viewingComponent.name || ''
+                                        });
+                                        setIsEditingIcon(true);
+                                    }}
+                                >
+                                    {getIcon(viewingComponent.icon || (viewingComponent.type && defaultComponents.find(c => c.type === viewingComponent.type)?.icon) || 'chip')}
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 rounded-lg transition-opacity">
+                                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                    </div>
+                                </div>
                                 <div>
                                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">{viewingComponent.name || viewingComponent.label}</h3>
                                     <p className="text-sm text-gray-500 dark:text-gray-400">
                                         {viewingComponent.type === 'custom' ? 'Custom Component' : 'Built-in Component'}
                                     </p>
+                                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 cursor-pointer hover:underline" onClick={() => setIsEditingIcon(true)}>
+                                        Click icon to customize
+                                    </p>
                                 </div>
+
+                                {/* Icon Editor Popover */}
+                                {isEditingIcon && (
+                                    <div className="absolute top-full left-0 mt-2 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-10 w-72">
+                                        <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3">Customize Appearance</h4>
+
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Color</label>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="color"
+                                                        value={editingIconData.color.startsWith('#') ? editingIconData.color : '#4B5563'}
+                                                        onChange={(e) => setEditingIconData(prev => ({ ...prev, color: e.target.value }))}
+                                                        className="w-8 h-8 rounded cursor-pointer border-0 p-0"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        value={editingIconData.color}
+                                                        onChange={(e) => setEditingIconData(prev => ({ ...prev, color: e.target.value }))}
+                                                        className="flex-1 text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-transparent"
+                                                        placeholder="#RRGGBB or bg-class"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Label / Abbreviation</label>
+                                                <input
+                                                    type="text"
+                                                    value={editingIconData.label}
+                                                    onChange={(e) => setEditingIconData(prev => ({ ...prev, label: e.target.value }))}
+                                                    className="w-full text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-transparent"
+                                                    placeholder="Component Name"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Icon</label>
+                                                <div className="grid grid-cols-5 gap-1 max-h-32 overflow-y-auto p-1">
+                                                    <button
+                                                        onClick={() => setEditingIconData(prev => ({ ...prev, icon: '' }))}
+                                                        className={`w-8 h-8 p-1 rounded border flex items-center justify-center text-[10px] font-bold ${!editingIconData.icon ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'}`}
+                                                        title="No Icon (Use Text)"
+                                                    >
+                                                        TXT
+                                                    </button>
+                                                    {Object.keys(COMPONENT_ICONS).map(iconName => (
+                                                        <button
+                                                            key={iconName}
+                                                            onClick={() => setEditingIconData(prev => ({ ...prev, icon: iconName }))}
+                                                            className={`w-8 h-8 p-1 rounded border ${editingIconData.icon === iconName ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'border-gray-200 dark:border-gray-700 text-gray-500'}`}
+                                                            title={iconName}
+                                                        >
+                                                            {COMPONENT_ICONS[iconName]}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex gap-2 pt-2">
+                                                <button
+                                                    onClick={handleSaveIconEdit}
+                                                    className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                                >
+                                                    Save
+                                                </button>
+                                                <button
+                                                    onClick={() => setIsEditingIcon(false)}
+                                                    className="flex-1 px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Pin Table */}
@@ -649,37 +804,76 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
                                 <div className="mb-3">
                                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Built-in Components</p>
                                     <div className="space-y-2">
-                                        {defaultComponents.map((comp) => {
-                                            const isHidden = hiddenDefaults.includes(comp.type);
+                                        {defaultComponents.filter(comp => !hiddenDefaults.includes(comp.type)).map((comp) => {
+                                            // Apply overrides
+                                            const override = defaultOverrides[comp.type] || {};
+                                            const displayComp = { ...comp, ...override };
+
                                             // Get pins for default components
                                             const componentPins = getDefaultComponentPins(comp.type);
                                             return (
                                                 <div
                                                     key={comp.type}
-                                                    className={`p-3 border rounded-lg flex items-center justify-between cursor-pointer transition-all ${isHidden ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 opacity-60' : 'border-gray-200 dark:border-gray-700 hover:border-blue-500 hover:shadow-md'}`}
+                                                    className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg flex items-center justify-between cursor-pointer hover:border-blue-500 hover:shadow-md transition-all"
                                                     onClick={() => setViewingComponent({ ...comp, pins: componentPins })}
                                                 >
                                                     <div className="flex items-center gap-3">
-                                                        <div className={`w-8 h-8 rounded ${comp.color}`}></div>
+                                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white p-2 ${displayComp.color?.startsWith('#') ? '' : displayComp.color}`} style={displayComp.color?.startsWith('#') ? { backgroundColor: displayComp.color } : {}}>
+                                                            {displayComp.icon ? getIcon(displayComp.icon) : <span className="text-xs font-bold">{(displayComp.label || displayComp.name).substring(0, 2).toUpperCase()}</span>}
+                                                        </div>
                                                         <div>
-                                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{comp.label}</span>
-                                                            <p className="text-xs text-gray-500">{isHidden ? 'Hidden' : 'Visible'}</p>
+                                                            <h3 className="font-medium text-gray-900 dark:text-white">{displayComp.label || displayComp.name}</h3>
+                                                            <p className="text-sm text-gray-500 dark:text-gray-400">{componentPins.length} pins</p>
                                                         </div>
                                                     </div>
                                                     <button
-                                                        onClick={() => isHidden ? onRestoreDefault(comp.type) : onRestoreDefault && (() => {
-                                                            const updated = [...hiddenDefaults, comp.type];
-                                                            localStorage.setItem('hiddenDefaultComponents', JSON.stringify(updated));
-                                                        })()}
-                                                        className={`px-3 py-1 text-xs rounded transition-colors ${isHidden ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onHideDefault && onHideDefault(comp.type);
+                                                        }}
+                                                        className="px-3 py-1 text-xs rounded transition-colors bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
                                                     >
-                                                        {isHidden ? 'Show' : 'Hide'}
+                                                        Hide
                                                     </button>
                                                 </div>
                                             );
                                         })}
                                     </div>
                                 </div>
+
+                                {/* Hidden Components */}
+                                {hiddenDefaults.length > 0 && (
+                                    <div className="mb-3">
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Hidden Components</p>
+                                        <div className="space-y-2 opacity-75">
+                                            {defaultComponents.filter(comp => hiddenDefaults.includes(comp.type)).map((comp) => {
+                                                const componentPins = getDefaultComponentPins(comp.type);
+                                                return (
+                                                    <div
+                                                        key={comp.type}
+                                                        className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg flex items-center justify-between bg-gray-50 dark:bg-gray-800/50"
+                                                    >
+                                                        <div className="flex items-center gap-3 opacity-50">
+                                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white p-2 ${comp.color?.startsWith('#') ? '' : comp.color}`} style={comp.color?.startsWith('#') ? { backgroundColor: comp.color } : {}}>
+                                                                {comp.icon ? getIcon(comp.icon) : <span className="text-xs font-bold">{(comp.label || comp.name).substring(0, 2).toUpperCase()}</span>}
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="font-medium text-gray-900 dark:text-white">{comp.label || comp.name}</h3>
+                                                                <p className="text-sm text-gray-500 dark:text-gray-400">{componentPins.length} pins</p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => onRestoreDefault(comp.type)}
+                                                            className="px-3 py-1 text-xs rounded transition-colors bg-green-600 hover:bg-green-700 text-white"
+                                                        >
+                                                            Show
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Custom Components */}
                                 {components.length > 0 && (
@@ -694,17 +888,23 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
                                                 >
                                                     <div className="flex items-center justify-between mb-2">
                                                         <div className="flex items-center gap-3 flex-1">
-                                                            <div className="w-8 h-8 rounded" style={{ backgroundColor: comp.color }}></div>
+                                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white p-2 ${comp.color?.startsWith('#') ? '' : comp.color}`} style={comp.color?.startsWith('#') ? { backgroundColor: comp.color } : {}}>
+                                                                {getIcon(comp.icon || 'chip')}
+                                                            </div>
                                                             <input
                                                                 type="text"
                                                                 value={comp.name}
                                                                 onChange={(e) => handleRenameComponent(comp.id, e.target.value)}
+                                                                onClick={(e) => e.stopPropagation()}
                                                                 className="flex-1 font-medium text-sm text-gray-900 dark:text-white bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
                                                             />
                                                         </div>
                                                         <div className="flex items-center gap-1">
                                                             <button
-                                                                onClick={() => handleDeleteComponent(comp.id)}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteComponent(comp.id);
+                                                                }}
                                                                 className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
                                                                 title="Delete"
                                                             >
@@ -714,7 +914,7 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
                                                             </button>
                                                         </div>
                                                     </div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400 pl-[52px]">
                                                         {comp.pins.length} pins
                                                     </div>
                                                 </div>
@@ -723,69 +923,6 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
                                     </div>
                                 )}
                             </div>
-
-                            {/* Hidden Default Components */}
-                            {hiddenDefaults && hiddenDefaults.length > 0 && (
-                                <div className="mb-4">
-                                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Hidden Default Components</h3>
-                                    <div className="space-y-2">
-                                        {defaultComponents.filter(comp => hiddenDefaults.includes(comp.type)).map((comp) => (
-                                            <div key={comp.type} className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg flex items-center justify-between bg-gray-50 dark:bg-gray-800">
-                                                <div className="flex items-center gap-2">
-                                                    <div className={`w-8 h-8 rounded ${comp.color}`}></div>
-                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{comp.label}</span>
-                                                </div>
-                                                <button
-                                                    onClick={() => onRestoreDefault(comp.type)}
-                                                    className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors"
-                                                >
-                                                    Restore
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Custom Components */}
-                            {components.length === 0 ? (
-                                <div className="text-center py-12 text-gray-500">
-                                    <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    <p className="font-medium">No custom components yet</p>
-                                    <p className="text-sm mt-1">Upload a PDF schematic or add manually</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {components.map((comp) => (
-                                        <div key={comp.id} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 transition-colors">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded" style={{ backgroundColor: comp.color }}></div>
-                                                    <div>
-                                                        <input
-                                                            type="text"
-                                                            value={comp.name}
-                                                            onChange={(e) => handleRenameComponent(comp.id, e.target.value)}
-                                                            className="font-medium text-gray-900 dark:text-white bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
-                                                        />
-                                                        <p className="text-xs text-gray-500">{comp.pins.length} pins</p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleDeleteComponent(comp.id)}
-                                                    className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                                                >
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
                         </>
                     ) : (
                         <div className="space-y-4">
@@ -808,6 +945,25 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
                                     onChange={(e) => setNewComponent(prev => ({ ...prev, color: e.target.value }))}
                                     className="w-full h-10 rounded-lg cursor-pointer"
                                 />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Icon</label>
+                                <div className="flex gap-2 flex-wrap">
+                                    {Object.keys(COMPONENT_ICONS).map((iconName) => (
+                                        <button
+                                            key={iconName}
+                                            onClick={() => setNewComponent(prev => ({ ...prev, icon: iconName }))}
+                                            className={`w-10 h-10 p-2 rounded-lg border transition-all ${newComponent.icon === iconName
+                                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-800'
+                                                : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-500'
+                                                }`}
+                                            title={iconName.charAt(0).toUpperCase() + iconName.slice(1)}
+                                        >
+                                            {COMPONENT_ICONS[iconName]}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
                             <div>
@@ -880,31 +1036,33 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
                 </div>
             </div>
             {/* Delete Confirmation Modal */}
-            {showDeleteConfirm && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={(e) => e.stopPropagation()}>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-96 max-w-full mx-4">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Delete Component?</h3>
-                        <p className="text-gray-600 dark:text-gray-400 mb-6">
-                            Are you sure you want to delete this component? This action cannot be undone.
-                        </p>
-                        <div className="flex justify-end gap-3">
-                            <button
-                                onClick={cancelDelete}
-                                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={confirmDelete}
-                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                            >
-                                Delete
-                            </button>
+            {
+                showDeleteConfirm && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={(e) => e.stopPropagation()}>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-96 max-w-full mx-4">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Delete Component?</h3>
+                            <p className="text-gray-600 dark:text-gray-400 mb-6">
+                                Are you sure you want to delete this component? This action cannot be undone.
+                            </p>
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={cancelDelete}
+                                    className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmDelete}
+                                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                                >
+                                    Delete
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

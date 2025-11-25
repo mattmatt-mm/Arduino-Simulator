@@ -2,6 +2,7 @@ import React from 'react';
 import Workspace from './components/Workspace';
 import IDEPanel from './components/IDEPanel';
 import Sidebar from './components/Sidebar';
+import { geminiService } from './services/geminiService';
 
 function App() {
   const [generatedCode, setGeneratedCode] = React.useState("");
@@ -13,6 +14,38 @@ function App() {
   const handleMouseDown = () => {
     setIsResizing(true);
   };
+
+  React.useEffect(() => {
+    const handleCircuitAnalysis = async () => {
+      if (!toonOutput) return;
+
+      try {
+        // Show loading state in feedback (optional, or handled by IDEPanel)
+        const result = await geminiService.analyzeCircuit(JSON.parse(toonOutput));
+
+        if (result.issues) {
+          // Map API issues to feedback format
+          const feedbackItems = result.issues.map(issue => ({
+            type: issue.severity === 'critical' ? 'error' : issue.severity === 'warning' ? 'warning' : 'info',
+            message: issue.message,
+            recommendation: issue.recommendation,
+            severity: issue.severity
+          }));
+          setAiFeedback(feedbackItems);
+        }
+      } catch (error) {
+        console.error("Circuit analysis failed:", error);
+        setAiFeedback([{
+          type: 'error',
+          message: 'Failed to analyze circuit. Please check your API key and internet connection.',
+          severity: 'critical'
+        }]);
+      }
+    };
+
+    window.addEventListener('requestCircuitAnalysis', handleCircuitAnalysis);
+    return () => window.removeEventListener('requestCircuitAnalysis', handleCircuitAnalysis);
+  }, [toonOutput]);
 
   React.useEffect(() => {
     const handleMouseMove = (e) => {

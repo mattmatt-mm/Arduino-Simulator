@@ -128,6 +128,41 @@ class GeminiService {
         const jsonStr = this.cleanJson(response);
         return JSON.parse(jsonStr);
     }
+
+    async analyzeCircuit(toonData) {
+        const apiKey = this.getApiKey();
+        if (!apiKey) throw new Error('API key not found');
+
+        const prompt = `Analyze this circuit connection data (TOON format) and provide a safety and logic report.
+        
+        TOON Data:
+        ${JSON.stringify(toonData, null, 2)}
+        
+        Check for:
+        1. Voltage level mismatches (e.g., 5V Arduino connected directly to 3.3V ESP32 or Raspberry Pi without level shifter).
+        2. Missing common grounds between different power sources/controllers.
+        3. Incorrect pin usage (e.g., connecting analog sensors to digital-only pins).
+        4. Logic errors in connections.
+        5. Power supply issues (e.g., drawing too much current from a GPIO pin).
+        
+        Return a concise JSON object with this structure:
+        {
+            "status": "safe" | "warning" | "danger",
+            "issues": [
+                {
+                    "severity": "critical" | "warning" | "info",
+                    "message": "Description of the issue",
+                    "recommendation": "How to fix it"
+                }
+            ],
+            "summary": "Brief summary of the circuit status"
+        }
+        Return ONLY the JSON.`;
+
+        const response = await this.generateContent(prompt);
+        return this.cleanJson(response);
+    }
+
     async validateApiKey(apiKey) {
         if (!apiKey || !apiKey.startsWith('AIza')) {
             return false;
