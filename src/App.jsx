@@ -9,6 +9,7 @@ function App() {
   const [toonOutput, setToonOutput] = React.useState("");
   const [aiFeedback, setAiFeedback] = React.useState([]);
   const [panelWidth, setPanelWidth] = React.useState(400);
+  const [isFullScreen, setIsFullScreen] = React.useState(false);
   const [isResizing, setIsResizing] = React.useState(false);
 
   const handleMouseDown = () => {
@@ -51,7 +52,7 @@ function App() {
     const handleMouseMove = (e) => {
       if (!isResizing) return;
       const newWidth = window.innerWidth - e.clientX;
-      if (newWidth >= 300 && newWidth <= 800) {
+      if (newWidth >= 300 && newWidth <= window.innerWidth - 50) {
         setPanelWidth(newWidth);
       }
     };
@@ -72,7 +73,7 @@ function App() {
   }, [isResizing]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground relative">
       <Sidebar />
       <div className="flex-grow h-full relative">
         <Workspace
@@ -83,17 +84,24 @@ function App() {
       </div>
 
       {/* Resize Handle */}
-      <div
-        onMouseDown={handleMouseDown}
-        className={`w-1 h-full bg-gray-300 dark:bg-gray-700 hover:bg-blue-500 cursor-col-resize transition-colors z-30 ${isResizing ? 'bg-blue-500' : ''
-          }`}
-      />
+      {!isFullScreen && (
+        <div
+          onMouseDown={handleMouseDown}
+          className={`w-1 h-full bg-gray-300 dark:bg-gray-700 hover:bg-blue-500 cursor-col-resize transition-colors z-30 ${isResizing ? 'bg-blue-500' : ''
+            }`}
+        />
+      )}
 
-      <div className="h-full flex-shrink-0 z-20 shadow-xl" style={{ width: `${panelWidth}px` }}>
+      <div
+        className={`h-full flex-shrink-0 z-40 shadow-xl bg-white dark:bg-gray-900 ${isResizing ? '' : 'transition-all duration-300'} ${isFullScreen ? 'absolute inset-0 w-full' : ''}`}
+        style={!isFullScreen ? { width: `${panelWidth}px` } : {}}
+      >
         <IDEPanel
           generatedCode={generatedCode}
           toonOutput={toonOutput}
           aiFeedback={aiFeedback}
+          isFullScreen={isFullScreen}
+          onToggleFullScreen={() => setIsFullScreen(!isFullScreen)}
         />
       </div>
     </div>

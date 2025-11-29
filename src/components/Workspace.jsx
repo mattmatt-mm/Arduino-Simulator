@@ -235,6 +235,11 @@ const WorkspaceContent = ({ onCodeChange, onTOONChange, onFeedbackChange }) => {
                     onDelete={deleteEdge}
                 />
             )}
+            <style>{`
+                .react-flow__edges { z-index: 1000 !important; pointer-events: none; }
+                .react-flow__edge-path { pointer-events: all; cursor: pointer; }
+                .react-flow__nodes { z-index: 0 !important; }
+            `}</style>
         </div>
     );
 };

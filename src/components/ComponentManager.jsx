@@ -886,18 +886,23 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
                                                     className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:border-blue-500 hover:shadow-md transition-all"
                                                     onClick={() => setViewingComponent(comp)}
                                                 >
-                                                    <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-3 flex-1">
                                                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white p-2 ${comp.color?.startsWith('#') ? '' : comp.color}`} style={comp.color?.startsWith('#') ? { backgroundColor: comp.color } : {}}>
                                                                 {getIcon(comp.icon || 'chip')}
                                                             </div>
-                                                            <input
-                                                                type="text"
-                                                                value={comp.name}
-                                                                onChange={(e) => handleRenameComponent(comp.id, e.target.value)}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className="flex-1 font-medium text-sm text-gray-900 dark:text-white bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
-                                                            />
+                                                            <div className="flex flex-col flex-1">
+                                                                <input
+                                                                    type="text"
+                                                                    value={comp.name}
+                                                                    onChange={(e) => handleRenameComponent(comp.id, e.target.value)}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="font-medium text-sm text-gray-900 dark:text-white bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1 w-full"
+                                                                />
+                                                                <div className="text-xs text-gray-500 dark:text-gray-400 px-1">
+                                                                    {comp.pins.length} pins
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                         <div className="flex items-center gap-1">
                                                             <button
@@ -913,9 +918,6 @@ const ComponentManager = ({ isOpen, onClose, onComponentsChange, hiddenDefaults 
                                                                 </svg>
                                                             </button>
                                                         </div>
-                                                    </div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400 pl-[52px]">
-                                                        {comp.pins.length} pins
                                                     </div>
                                                 </div>
                                             ))}

@@ -52,10 +52,14 @@ class GeminiService {
         return jsonStr;
     }
 
-    async modifyCode(currentCode, userPrompt) {
-        const prompt = CODE_MODIFICATION_PROMPT
+    async modifyCode(currentCode, userPrompt, circuitContext) {
+        let prompt = CODE_MODIFICATION_PROMPT
             .replace('{code}', currentCode)
             .replace('{prompt}', userPrompt);
+
+        if (circuitContext) {
+            prompt += `\n\nCircuit Context (TOON Data):\n${JSON.stringify(circuitContext, null, 2)}\n\nIMPORTANT: Use the above circuit context to identify connected pins and components. Ensure the generated code uses the correct pin numbers and logic for the connected components (e.g. motors, sensors).`;
+        }
 
         let modifiedCode = await this.generateContent(prompt);
 
