@@ -273,10 +273,9 @@ const IDEPanel = ({ generatedCode, toonOutput, aiFeedback, isFullScreen, onToggl
                         return (
                             <div key={index} className={`p-4 rounded-xl ${cardBg} border border-transparent hover:border-opacity-50 transition-all`}>
                                 <div className="flex items-start gap-3">
-                                    <div className={`mt-1 ${iconColor}`}>
-                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                            <circle cx="10" cy="10" r="8" />
-                                        </svg>
+                                    <div className={`mt-1 relative flex h-3 w-3 ${iconColor}`}>
+                                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-current`}></span>
+                                        <span className={`relative inline-flex rounded-full h-3 w-3 bg-current`}></span>
                                     </div>
                                     <div>
                                         <h4 className={`font-bold text-sm ${titleColor} mb-1`}>
